@@ -1,0 +1,327 @@
+.wc-ac-analytics__page {
+  display: grid;
+  gap: 24px;
+  margin-top: 20px;
+}
+
+.wc-ac-analytics__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.wc-ac-analytics__header p,
+.wc-ac-analytics__meta,
+.wc-ac-analytics-chart-card__header p,
+.wc-ac-analytics-table-card__header p,
+.wc-ac-analytics__note {
+  margin: 0;
+  color: #50575e;
+}
+
+.wc-ac-analytics__intro {
+  max-width: 720px;
+}
+
+.wc-ac-analytics__range {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wc-ac-analytics__range a {
+  padding: 8px 12px;
+  border: 1px solid #dcdcde;
+  border-radius: 0;
+  background: #fff;
+  color: #1d2327;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.wc-ac-analytics__range a.is-active {
+  border-color: var(--wp-components-color-accent, var(--wp-admin-theme-color, #3858e9));
+  box-shadow: inset 0 0 0 var(--wp-admin-border-width-focus, 1px) var(--wp-components-color-accent, var(--wp-admin-theme-color, #3858e9));
+}
+
+.wc-ac-analytics__custom-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wc-ac-analytics__custom-range input[type="date"] {
+  padding: 6px 8px;
+  border: 1px solid #dcdcde;
+  border-radius: 0;
+  background: #fff;
+  color: #1d2327;
+  font-size: 13px;
+  font-family: inherit;
+  line-height: 1.4;
+}
+
+.wc-ac-analytics__custom-range.is-active input[type="date"] {
+  border-color: var(--wp-components-color-accent, var(--wp-admin-theme-color, #3858e9));
+  box-shadow: inset 0 0 0 var(--wp-admin-border-width-focus, 1px) var(--wp-components-color-accent, var(--wp-admin-theme-color, #3858e9));
+}
+
+.wc-ac-analytics__range-separator {
+  color: #50575e;
+  font-weight: 600;
+}
+
+.wc-ac-analytics__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  font-size: 13px;
+}
+
+.wc-ac-analytics__cards,
+.wc-ac-analytics__charts {
+  display: grid;
+  gap: 16px;
+}
+
+.wc-ac-analytics__cards {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.wc-ac-analytics__charts {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.wc-ac-analytics-card,
+.wc-ac-analytics-chart-card,
+.wc-ac-analytics-table-card {
+  border: 1px solid #dcdcde;
+  border-radius: 0;
+  background: #fff;
+  box-shadow: none;
+}
+
+.wc-ac-analytics-card {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  padding: 18px 20px;
+}
+
+.wc-ac-analytics-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  border-radius: 0;
+  background: #e2e4e7;
+}
+
+.wc-ac-analytics-card.is-abandoned::before {
+  background: var(--wc-red, #d63638);
+}
+
+.wc-ac-analytics-card.is-reopened::before {
+  background: #0a7b83;
+}
+
+.wc-ac-analytics-card.is-recovered::before,
+.wc-ac-analytics-card.is-rate::before {
+  background: var(--wp-components-color-accent, var(--wp-admin-theme-color, #3858e9));
+}
+
+.wc-ac-analytics-card.is-revenue::before {
+  background: var(--wc-green, #1d9e74);
+}
+
+.wc-ac-analytics-card.is-recoverable::before {
+  background: var(--wc-orange, #dba617);
+}
+
+.wc-ac-analytics-card__eyebrow {
+  color: #50575e;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.wc-ac-analytics-card__value {
+  display: block;
+  color: #1d2327;
+  font-size: 31px;
+  line-height: 1.1;
+}
+
+.wc-ac-analytics-card__label {
+  color: #50575e;
+  font-size: 14px;
+}
+
+.wc-ac-analytics-chart-card__header,
+.wc-ac-analytics-table-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 0;
+}
+
+.wc-ac-analytics-chart-card h2,
+.wc-ac-analytics-table-card h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.wc-ac-analytics__legend {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.wc-ac-analytics__legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #50575e;
+}
+
+.wc-ac-analytics__legend span::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 0;
+  background: #e2e4e7;
+}
+
+.wc-ac-analytics__legend .is-abandoned::before {
+  background: var(--wc-red, #d63638);
+}
+
+.wc-ac-analytics__legend .is-recovered::before {
+  background: var(--wp-components-color-accent, var(--wp-admin-theme-color, #3858e9));
+}
+
+.wc-ac-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  padding: 8px 12px 16px;
+}
+
+.wc-ac-chart__grid-line {
+  stroke: #e2e4e7;
+  stroke-width: 1;
+}
+
+.wc-ac-chart__axis-label {
+  fill: #50575e;
+  font-size: 12px;
+  text-anchor: end;
+}
+
+.wc-ac-chart__axis-label.is-x {
+  text-anchor: middle;
+}
+
+.wc-ac-chart__bar {
+  fill: #e2e4e7;
+  opacity: 0.95;
+}
+
+.wc-ac-chart__bar.is-abandoned {
+  fill: var(--wc-red, #d63638);
+}
+
+.wc-ac-chart__bar.is-revenue {
+  fill: var(--wc-green, #1d9e74);
+}
+
+.wc-ac-chart__line {
+  fill: none;
+  stroke: var(--wp-components-color-accent, var(--wp-admin-theme-color, #3858e9));
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.wc-ac-chart__point {
+  fill: var(--wp-components-color-accent, var(--wp-admin-theme-color, #3858e9));
+}
+
+.wc-ac-analytics__empty {
+  margin: 16px 20px 20px;
+  padding: 24px;
+  border: 1px dashed #dcdcde;
+  border-radius: 0;
+  background: #f6f7f7;
+  color: #50575e;
+  text-align: center;
+}
+
+.wc-ac-analytics-table-card__table {
+  padding: 8px 20px 20px;
+}
+
+.wc-ac-analytics-table-card table {
+  border: 0;
+  box-shadow: none;
+}
+
+.wc-ac-analytics-table-card th {
+  color: #50575e;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.wc-ac-analytics-table-card td,
+.wc-ac-analytics-table-card th {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.wc-ac-analytics__note {
+  font-size: 13px;
+}
+
+@media (max-width: 1400px) {
+  .wc-ac-analytics__cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1200px) {
+  .wc-ac-analytics__cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .wc-ac-analytics__charts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 782px) {
+  .wc-ac-analytics__header,
+  .wc-ac-analytics-chart-card__header,
+  .wc-ac-analytics-table-card__header {
+    flex-direction: column;
+  }
+
+  .wc-ac-analytics__cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .wc-ac-chart {
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+}
