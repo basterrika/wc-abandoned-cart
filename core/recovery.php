@@ -14,7 +14,14 @@ defined('ABSPATH') || exit;
 add_action('woocommerce_checkout_order_processed', 'wc_ac_capture_cart_snapshot');
 add_action('woocommerce_store_api_checkout_order_processed', 'wc_ac_capture_cart_snapshot');
 function wc_ac_capture_cart_snapshot($arg): void {
-    if (!wc_ac_is_enabled() || !function_exists('WC') || !WC()->cart) {
+    if (!wc_ac_is_enabled() || !function_exists('WC')) {
+        return;
+    }
+
+    $woocommerce = WC();
+    $cart = $woocommerce->cart;
+
+    if (!$cart) {
         return;
     }
 
@@ -24,16 +31,18 @@ function wc_ac_capture_cart_snapshot($arg): void {
         return;
     }
 
-    $cart_contents = WC()->cart->get_cart_for_session();
+    $cart_contents = $cart->get_cart_for_session();
 
     if (empty($cart_contents)) {
         return;
     }
 
+    $session = $woocommerce->session;
+
     $snapshot = [
         'cart' => $cart_contents,
-        'coupons' => WC()->cart->get_applied_coupons(),
-        'chosen_shipping_methods' => WC()->session ? (array)WC()->session->get('chosen_shipping_methods', []) : [],
+        'coupons' => $cart->get_applied_coupons(),
+        'chosen_shipping_methods' => $session ? (array)$session->get('chosen_shipping_methods', []) : [],
     ];
 
     $order->update_meta_data(WC_AC_META_CART_SNAPSHOT, $snapshot);
@@ -66,11 +75,16 @@ function wc_ac_handle_recovery_request(): void {
         return;
     }
 
-    if (function_exists('wc_load_cart') && did_action('woocommerce_init') && (!WC()->cart || !WC()->session)) {
+    $woocommerce = WC();
+
+    if (function_exists('wc_load_cart') && did_action('woocommerce_init') && (!$woocommerce->cart || !$woocommerce->session)) {
         wc_load_cart();
     }
 
-    if (!WC()->cart || !WC()->session) {
+    $cart = $woocommerce->cart;
+    $session = $woocommerce->session;
+
+    if (!$cart || !$session) {
         return;
     }
 
@@ -115,7 +129,7 @@ function wc_ac_handle_recovery_request(): void {
     $ttl_minutes = (int)apply_filters('wc_ac_recovery_attribution_ttl_minutes', WC_AC_RECOVERY_ATTRIBUTION_TTL_MINUTES);
     $now = time();
 
-    WC()->session->set('wc_ac_recovery_attribution', [
+    $session->set('wc_ac_recovery_attribution', [
         'order_id' => $order->get_id(),
         'recovered_at' => $now,
         'expires_at' => $now + max(1, $ttl_minutes) * MINUTE_IN_SECONDS,
@@ -151,7 +165,13 @@ function wc_ac_handle_recovery_request(): void {
 add_action('woocommerce_checkout_order_processed', 'wc_ac_maybe_complete_recovery');
 add_action('woocommerce_store_api_checkout_order_processed', 'wc_ac_maybe_complete_recovery');
 function wc_ac_maybe_complete_recovery($arg): void {
-    if (!function_exists('WC') || !WC()->session) {
+    if (!function_exists('WC')) {
+        return;
+    }
+
+    $session = WC()->session;
+
+    if (!$session) {
         return;
     }
 
@@ -161,7 +181,7 @@ function wc_ac_maybe_complete_recovery($arg): void {
         return;
     }
 
-    $attribution = WC()->session->get('wc_ac_recovery_attribution');
+    $attribution = $session->get('wc_ac_recovery_attribution');
 
     if (!is_array($attribution) || empty($attribution['order_id'])) {
         return;
@@ -169,7 +189,7 @@ function wc_ac_maybe_complete_recovery($arg): void {
 
     // Always clear once we've decided to consider this attribution — whether we
     // end up linking the order or skipping due to TTL / fingerprint mismatch.
-    WC()->session->set('wc_ac_recovery_attribution', null);
+    $session->set('wc_ac_recovery_attribution', null);
 
     if (time() > (int)($attribution['expires_at'] ?? 0)) {
         return;
@@ -221,7 +241,7 @@ function wc_ac_complete_recovery(int $new_order_id, int $original_order_id): voi
     $original = wc_get_order($original_order_id);
 
     if ($original instanceof WC_Order && (int)$original->get_meta(WC_AC_META_RECOVERED_ORDER) === 0) {
-        $original->update_meta_data(WC_AC_META_RECOVERED_ORDER, $new_order_id);
+        $original->update_meta_data(WC_AC_META_RECOVERED_ORDER, (string)$new_order_id);
         $original->update_meta_data(WC_AC_META_RECOVERED_AT, wc_ac_now());
         $original->save();
     }
@@ -229,7 +249,7 @@ function wc_ac_complete_recovery(int $new_order_id, int $original_order_id): voi
     $new_order = wc_get_order($new_order_id);
 
     if ($new_order instanceof WC_Order) {
-        $new_order->update_meta_data(WC_AC_META_RECOVERED_FROM, $original_order_id);
+        $new_order->update_meta_data(WC_AC_META_RECOVERED_FROM, (string)$original_order_id);
 
         $original_link = sprintf(
             '<a href="%s">#%s</a>',
@@ -367,19 +387,27 @@ function wc_ac_restore_cart_from_order(WC_Order $order): array {
         return ['restored' => 0, 'failed' => $failed, 'fingerprint' => []];
     }
 
+    $woocommerce = WC();
+    $cart = $woocommerce->cart;
+    $session = $woocommerce->session;
+
+    if (!$cart || !$session) {
+        return ['restored' => 0, 'failed' => $failed, 'fingerprint' => []];
+    }
+
     // Capture live state for rollback: add_to_cart() can still reject every planned
     // item via deeper stock checks, quantity rules, or third-party validation hooks.
-    $previous_contents = WC()->cart->get_cart_contents();
-    $previous_coupons = WC()->cart->get_applied_coupons();
-    $previous_shipping = (array)WC()->session->get('chosen_shipping_methods', []);
+    $previous_contents = $cart->get_cart_contents();
+    $previous_coupons = $cart->get_applied_coupons();
+    $previous_shipping = (array)$session->get('chosen_shipping_methods', []);
 
-    WC()->cart->empty_cart();
+    $cart->empty_cart();
 
     $restored = 0;
     $fingerprint = [];
 
     foreach ($planned as $item) {
-        $key = WC()->cart->add_to_cart(
+        $key = $cart->add_to_cart(
             $item['product_id'],
             $item['quantity'],
             $item['variation_id'],
@@ -398,10 +426,10 @@ function wc_ac_restore_cart_from_order(WC_Order $order): array {
     }
 
     if ($restored === 0) {
-        WC()->cart->set_cart_contents($previous_contents);
-        WC()->cart->set_applied_coupons($previous_coupons);
-        WC()->session->set('chosen_shipping_methods', $previous_shipping);
-        WC()->cart->calculate_totals();
+        $cart->set_cart_contents($previous_contents);
+        $cart->set_applied_coupons($previous_coupons);
+        $session->set('chosen_shipping_methods', $previous_shipping);
+        $cart->calculate_totals();
 
         return ['restored' => 0, 'failed' => $failed, 'fingerprint' => []];
     }
@@ -411,19 +439,19 @@ function wc_ac_restore_cart_from_order(WC_Order $order): array {
     $desired_shipping = (array)($snapshot['chosen_shipping_methods'] ?? []);
 
     if (!empty($desired_shipping)) {
-        WC()->session->set('chosen_shipping_methods', $desired_shipping);
+        $session->set('chosen_shipping_methods', $desired_shipping);
     }
 
     foreach ((array)($snapshot['coupons'] ?? []) as $code) {
-        if (!WC()->cart->has_discount($code)) {
-            WC()->cart->apply_coupon($code);
+        if (!$cart->has_discount($code)) {
+            $cart->apply_coupon($code);
         }
     }
 
-    WC()->cart->calculate_totals();
+    $cart->calculate_totals();
 
     if (!empty($desired_shipping)) {
-        $actual_shipping = (array)WC()->session->get('chosen_shipping_methods', []);
+        $actual_shipping = (array)$session->get('chosen_shipping_methods', []);
 
         foreach ($desired_shipping as $package_index => $method) {
             if (($actual_shipping[$package_index] ?? null) !== $method) {
@@ -449,25 +477,27 @@ function wc_ac_restore_cart_from_order(WC_Order $order): array {
  * checkout fields are pre-filled.
  */
 function wc_ac_restore_customer_addresses(WC_Order $order): void {
-    if (!WC()->customer) {
+    $customer = WC()->customer;
+
+    if (!$customer) {
         return;
     }
 
     foreach ($order->get_address('billing') as $key => $value) {
         $setter = "set_billing_$key";
 
-        if (method_exists(WC()->customer, $setter)) {
-            WC()->customer->$setter($value);
+        if (method_exists($customer, $setter)) {
+            $customer->$setter($value);
         }
     }
 
     foreach ($order->get_address('shipping') as $key => $value) {
         $setter = "set_shipping_$key";
 
-        if (method_exists(WC()->customer, $setter)) {
-            WC()->customer->$setter($value);
+        if (method_exists($customer, $setter)) {
+            $customer->$setter($value);
         }
     }
 
-    WC()->customer->save();
+    $customer->save();
 }
