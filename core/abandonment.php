@@ -144,7 +144,7 @@ function wc_ac_send_recovery_email($order_id): void {
     }
 
     if (!$sent) {
-        $order->update_meta_data(WC_AC_META_SEND_ATTEMPTS, $attempts);
+        $order->update_meta_data(WC_AC_META_SEND_ATTEMPTS, (string)$attempts);
         $order->save();
 
         if (function_exists('wc_get_logger')) {
@@ -174,13 +174,19 @@ function wc_ac_send_recovery_email($order_id): void {
     $order->save();
 }
 
-function wc_ac_get_email_instance() {
-    if (!function_exists('WC') || !WC()->mailer()) {
+function wc_ac_get_email_instance(): ?WC_AC_Email_Abandoned_Cart {
+    if (!function_exists('WC')) {
         return null;
     }
 
-    $emails = WC()->mailer()->get_emails();
+    $mailer = WC()->mailer();
+
+    if (!$mailer) {
+        return null;
+    }
+
+    $emails = $mailer->get_emails();
     $email = $emails['wc_ac_abandoned_cart'] ?? null;
 
-    return $email instanceof WC_Email ? $email : null;
+    return $email instanceof WC_AC_Email_Abandoned_Cart ? $email : null;
 }
