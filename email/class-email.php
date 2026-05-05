@@ -117,7 +117,7 @@ class WC_AC_Email_Abandoned_Cart extends WC_Email {
             );
         }
         finally {
-            $this->object = null;
+            $this->object = false;
             $this->recipient = '';
             $this->recovery_url = '';
             $this->placeholders['{customer_email}'] = '';
@@ -253,7 +253,9 @@ class WC_AC_Email_Abandoned_Cart extends WC_Email {
             }
         }
 
-        if (!$image_id) {
+        $image_id = absint($image_id);
+
+        if ($image_id <= 0) {
             return '';
         }
 
