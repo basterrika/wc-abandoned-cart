@@ -1,0 +1,19 @@
+includes:
+    - vendor/szepeviktor/phpstan-wordpress/extension.neon
+
+parameters:
+    level: 5
+    treatPhpDocTypesAsCertain: false
+    paths:
+        - analytics
+        - core
+        - email
+        - settings
+        - uninstall.php
+        - wc-abandoned-cart.php
+    bootstrapFiles:
+        - phpstan-bootstrap.php
+    scanFiles:
+        - vendor/php-stubs/woocommerce-stubs/woocommerce-stubs.php
+        - vendor/php-stubs/wordpress-globals/wordpress-globals.php
+    tmpDir: .phpstan/cache

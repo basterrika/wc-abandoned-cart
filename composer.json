@@ -1,0 +1,22 @@
+{
+  "name": "basterrika/wc-abandoned-cart",
+  "description": "Recover abandoned carts by re-engaging customers whose unpaid orders were auto-cancelled.",
+  "type": "wordpress-plugin",
+  "license": "proprietary",
+  "authors": [
+    {
+      "name": "Mikel",
+      "email": "mikel@basterrika.com"
+    }
+  ],
+  "require-dev": {
+    "php-stubs/woocommerce-stubs": "v10.7.0",
+    "php-stubs/wordpress-globals": "v0.2.0",
+    "phpstan/phpstan": "2.1.49",
+    "roave/security-advisories": "dev-latest",
+    "szepeviktor/phpstan-wordpress": "v2.0.3"
+  },
+  "scripts": {
+    "analyse": "phpstan analyse --memory-limit=4G"
+  }
+}
