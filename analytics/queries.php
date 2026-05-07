@@ -161,6 +161,9 @@ function wc_ac_get_analytics_report($days): array {
         'recent_orders' => wc_ac_get_recent_recovered_orders(
             wc_ac_get_analytics_recent_recovered($period)
         ),
+        'recent_abandoned' => wc_ac_get_recent_abandoned_orders(
+            wc_ac_get_analytics_recent_abandoned($period)
+        ),
     ];
 }
 
@@ -296,8 +299,12 @@ function wc_ac_sql_gmt_to_local_date(string $column): string {
 /**
  * Return daily abandoned-cart counts in the period.
  *
- * Buckets the GMT timestamp stored in WC_AC_META_EMAIL_SENT_AT into local
- * calendar days so the chart aligns with the merchant's timezone.
+ * Buckets the GMT timestamp stored in WC_AC_META_ABANDONED_AT into local
+ * calendar days so the chart aligns with the merchant's timezone. Anchoring
+ * on the auto-cancel time (rather than the recovery email send time) keeps
+ * the abandoned chart, summary, cohort counts, and recent-abandoned table
+ * on the same timeline — and includes carts whose recovery email is still
+ * pending or has failed permanently.
  *
  * @param array<string, mixed> $period Analytics period.
  *
@@ -317,7 +324,7 @@ function wc_ac_get_analytics_abandoned_daily(array $period): array {
             AND m.meta_value >= %s
             AND m.meta_value <= %s
         GROUP BY day",
-        WC_AC_META_EMAIL_SENT_AT,
+        WC_AC_META_ABANDONED_AT,
         (string)$period['start_gmt'],
         (string)$period['end_gmt']
     );
@@ -458,7 +465,103 @@ function wc_ac_get_analytics_recent_recovered(array $period, int $limit = 10): a
 }
 
 /**
- * Count carts abandoned in the period that the customer reopened from the recovery email.
+ * Fetch the most recent abandoned orders in the period, joined with their
+ * full recovery pipeline state in a single round-trip.
+ *
+ * Anchored on WC_AC_META_ABANDONED_AT (set the moment the order is auto-cancelled
+ * with a snapshot) so the table includes carts whose recovery email is still
+ * pending, has failed permanently, has been sent, was reopened, or was
+ * recovered. The recovered order is joined to wc_order_stats with the same
+ * excluded-status filter the rest of the report uses, so a cart only resolves
+ * to "Recovered" when its replacement order would also count in the summary
+ * — replacements that are pending, failed, cancelled, trashed, or deleted
+ * leave `valid_recovered_order_id` NULL and the row falls back to "Reopened".
+ *
+ * @param array<string, mixed> $period Analytics period.
+ *
+ * @return array<int, array<string, mixed>>
+ */
+function wc_ac_get_analytics_recent_abandoned(array $period, int $limit = 25): array {
+    global $wpdb;
+
+    $meta_table = wc_ac_orders_meta_table();
+    $id_col = wc_ac_orders_meta_id_column();
+    $stats_select = "NULL AS total_sales, '' AS order_status, NULL AS valid_recovered_order_id";
+    $stats_join = '';
+    $recovered_stats_join = '';
+    $extra_params = [];
+
+    if (wc_ac_has_analytics_order_stats_table()) {
+        $order_stats_table = $wpdb->prefix . 'wc_order_stats';
+        $excluded_statuses = wc_ac_get_analytics_excluded_order_statuses();
+        $status_placeholders = implode(', ', array_fill(0, count($excluded_statuses), '%s'));
+
+        $stats_select = 'stats.total_sales, stats.status AS order_status, recovered_stats.order_id AS valid_recovered_order_id';
+        $stats_join = "LEFT JOIN `{$order_stats_table}` stats
+            ON stats.order_id = m_abandoned.{$id_col}
+            AND stats.parent_id = 0";
+        $recovered_stats_join = "LEFT JOIN `{$order_stats_table}` recovered_stats
+            ON recovered_stats.order_id = CAST(m_recovered.meta_value AS UNSIGNED)
+            AND recovered_stats.parent_id = 0
+            AND recovered_stats.status NOT IN ({$status_placeholders})";
+        $extra_params = $excluded_statuses;
+    }
+
+    // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Identifiers built internally.
+    $sql = $wpdb->prepare(
+        "SELECT m_abandoned.{$id_col} AS order_id,
+                m_abandoned.meta_value AS abandoned_at,
+                m_email.meta_value AS email_sent_at,
+                m_attempts.meta_value AS send_attempts,
+                m_reopened.meta_value AS reopened_at,
+                {$stats_select}
+        FROM `{$meta_table}` m_abandoned
+        LEFT JOIN `{$meta_table}` m_email
+            ON m_email.{$id_col} = m_abandoned.{$id_col}
+            AND m_email.meta_key = %s
+        LEFT JOIN `{$meta_table}` m_attempts
+            ON m_attempts.{$id_col} = m_abandoned.{$id_col}
+            AND m_attempts.meta_key = %s
+        LEFT JOIN `{$meta_table}` m_reopened
+            ON m_reopened.{$id_col} = m_abandoned.{$id_col}
+            AND m_reopened.meta_key = %s
+        LEFT JOIN `{$meta_table}` m_recovered
+            ON m_recovered.{$id_col} = m_abandoned.{$id_col}
+            AND m_recovered.meta_key = %s
+        {$stats_join}
+        {$recovered_stats_join}
+        WHERE m_abandoned.meta_key = %s
+            AND m_abandoned.meta_value >= %s
+            AND m_abandoned.meta_value <= %s
+        ORDER BY m_abandoned.meta_value DESC
+        LIMIT %d",
+        ...array_merge(
+            [
+                WC_AC_META_EMAIL_SENT_AT,
+                WC_AC_META_SEND_ATTEMPTS,
+                WC_AC_META_REOPENED_AT,
+                WC_AC_META_RECOVERED_ORDER,
+            ],
+            $extra_params,
+            [
+                WC_AC_META_ABANDONED_AT,
+                (string)$period['start_gmt'],
+                (string)$period['end_gmt'],
+                $limit,
+            ]
+        )
+    );
+
+    $rows = $wpdb->get_results($sql, ARRAY_A);
+
+    return is_array($rows) ? $rows : [];
+}
+
+/**
+ * Count carts that became abandoned in the period and were reopened at least
+ * once from the recovery email. The cohort anchor is WC_AC_META_ABANDONED_AT
+ * to keep the reopened cohort on the same timeline as the abandoned chart,
+ * summary, and recent-abandoned table.
  *
  * @param array<string, mixed> $period Analytics period.
  */
@@ -470,16 +573,16 @@ function wc_ac_get_analytics_reopened_count_for_abandoned_period(array $period):
 
     // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Identifiers built internally.
     $sql = $wpdb->prepare(
-        "SELECT COUNT(DISTINCT m_sent.{$id_col})
-        FROM `{$meta_table}` m_sent
+        "SELECT COUNT(DISTINCT m_abandoned.{$id_col})
+        FROM `{$meta_table}` m_abandoned
         INNER JOIN `{$meta_table}` m_reopen
-            ON m_reopen.{$id_col} = m_sent.{$id_col}
+            ON m_reopen.{$id_col} = m_abandoned.{$id_col}
             AND m_reopen.meta_key = %s
-        WHERE m_sent.meta_key = %s
-            AND m_sent.meta_value >= %s
-            AND m_sent.meta_value <= %s",
+        WHERE m_abandoned.meta_key = %s
+            AND m_abandoned.meta_value >= %s
+            AND m_abandoned.meta_value <= %s",
         WC_AC_META_REOPENED_AT,
-        WC_AC_META_EMAIL_SENT_AT,
+        WC_AC_META_ABANDONED_AT,
         (string)$period['start_gmt'],
         (string)$period['end_gmt']
     );
@@ -488,10 +591,12 @@ function wc_ac_get_analytics_reopened_count_for_abandoned_period(array $period):
 }
 
 /**
- * Count carts abandoned in the period that became valid recovered orders.
- *
- * Joins through the recovered-order meta into wc_order_stats so we only
- * count cohorts whose new order is still in a counted status.
+ * Count carts that became abandoned in the period and resulted in a valid
+ * recovered order. Joins through the recovered-order meta into wc_order_stats
+ * so we only count cohorts whose new order is still in a counted status. The
+ * cohort anchor is WC_AC_META_ABANDONED_AT to keep the recovery rate honest
+ * — its denominator is the true population of carts abandoned in the period
+ * (including those whose recovery email failed or is still pending).
  *
  * @param array<string, mixed> $period Analytics period.
  */
@@ -510,22 +615,22 @@ function wc_ac_get_analytics_recovered_count_for_abandoned_period(array $period)
 
     // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Identifiers built internally.
     $sql = $wpdb->prepare(
-        "SELECT COUNT(DISTINCT m_sent.{$id_col})
-        FROM `{$meta_table}` m_sent
+        "SELECT COUNT(DISTINCT m_abandoned.{$id_col})
+        FROM `{$meta_table}` m_abandoned
         INNER JOIN `{$meta_table}` m_rec
-            ON m_rec.{$id_col} = m_sent.{$id_col}
+            ON m_rec.{$id_col} = m_abandoned.{$id_col}
             AND m_rec.meta_key = %s
         INNER JOIN `{$order_stats_table}` stats
             ON stats.order_id = CAST(m_rec.meta_value AS UNSIGNED)
-        WHERE m_sent.meta_key = %s
-            AND m_sent.meta_value >= %s
-            AND m_sent.meta_value <= %s
+        WHERE m_abandoned.meta_key = %s
+            AND m_abandoned.meta_value >= %s
+            AND m_abandoned.meta_value <= %s
             AND stats.parent_id = 0
             AND stats.status NOT IN ({$status_placeholders})",
         ...array_merge(
             [
                 WC_AC_META_RECOVERED_ORDER,
-                WC_AC_META_EMAIL_SENT_AT,
+                WC_AC_META_ABANDONED_AT,
                 (string)$period['start_gmt'],
                 (string)$period['end_gmt'],
             ],
@@ -693,6 +798,106 @@ function wc_ac_get_recent_recovered_orders(array $recovered_orders): array {
     }
 
     return $orders;
+}
+
+/**
+ * Prepare recent abandoned orders for display.
+ *
+ * Batch-loads original abandoned orders together with any linked recovered
+ * orders in a single wc_get_orders() call, so the table renders without N+1
+ * lookups. Falls back to the wc_order_stats snapshot for total/status when
+ * the order object is unavailable.
+ *
+ * @param array<int, array<string, mixed>> $rows Raw rows from wc_ac_get_analytics_recent_abandoned().
+ *
+ * @return array<int, array<string, mixed>>
+ */
+function wc_ac_get_recent_abandoned_orders(array $rows): array {
+    if (empty($rows)) {
+        return [];
+    }
+
+    $abandoned_ids = [];
+    $recovered_ids = [];
+
+    foreach ($rows as $row) {
+        $abandoned_ids[] = absint($row['order_id']);
+        $valid_recovered_id = absint($row['valid_recovered_order_id'] ?? 0);
+
+        if ($valid_recovered_id > 0) {
+            $recovered_ids[] = $valid_recovered_id;
+        }
+    }
+
+    $all_ids = array_values(array_unique(array_merge($abandoned_ids, $recovered_ids)));
+    $order_objects = [];
+
+    foreach (wc_get_orders(['include' => $all_ids, 'limit' => count($all_ids), 'status' => 'any']) as $obj) {
+        $order_objects[$obj->get_id()] = $obj;
+    }
+
+    $datetime_format = get_option('date_format') . ' ' . get_option('time_format');
+    $orders = [];
+
+    foreach ($rows as $row) {
+        $order_id = absint($row['order_id']);
+        $order_object = $order_objects[$order_id] ?? null;
+        $valid_recovered_id = absint($row['valid_recovered_order_id'] ?? 0);
+        $recovered_object = $valid_recovered_id > 0 ? ($order_objects[$valid_recovered_id] ?? null) : null;
+        $current_status = $order_object ? $order_object->get_status() : (string)($row['order_status'] ?? '');
+
+        $orders[] = [
+            'order_id' => $order_id,
+            'order_number' => $order_object ? $order_object->get_order_number() : (string)$order_id,
+            'email' => $order_object ? sanitize_email((string)$order_object->get_billing_email()) : '',
+            'order_status' => wc_ac_get_analytics_order_status_label($current_status),
+            'total' => $order_object ? (float)$order_object->get_total() : (float)($row['total_sales'] ?? 0),
+            'abandoned_at' => get_date_from_gmt((string)$row['abandoned_at'], $datetime_format),
+            'recovery_status' => wc_ac_get_recovery_pipeline_status($row),
+            'edit_url' => wc_ac_get_analytics_order_edit_url($order_id),
+            'recovered_order_number' => $recovered_object instanceof WC_Order ? (string)$recovered_object->get_order_number() : '',
+            'recovered_order_edit_url' => $recovered_object instanceof WC_Order ? wc_ac_get_analytics_order_edit_url($valid_recovered_id) : '',
+        ];
+    }
+
+    return $orders;
+}
+
+/**
+ * Map an abandoned-order row to its recovery pipeline state.
+ *
+ * States are mutually exclusive and evaluated in order of how far the cart
+ * progressed: recovered > reopened > email-sent > email-failed > email-pending.
+ * "Recovered" relies on `valid_recovered_order_id`, which the SQL only
+ * populates when the replacement order would also count in the rest of the
+ * report (parent_id=0 and not in an excluded status). A cart whose
+ * replacement is pending, failed, cancelled, trashed, or deleted therefore
+ * falls back to "Reopened" — the customer did reopen the cart, the order
+ * just isn't counted. "email-failed" requires the retry budget to be
+ * exhausted (3 attempts) so a cart still mid-retry shows as "email-pending".
+ *
+ * @param array<string, mixed> $row Row from wc_ac_get_analytics_recent_abandoned().
+ *
+ * @return array{key: string, label: string}
+ */
+function wc_ac_get_recovery_pipeline_status(array $row): array {
+    if ((int)($row['valid_recovered_order_id'] ?? 0) > 0) {
+        return ['key' => 'recovered', 'label' => __('Recovered', 'wc-abandoned-cart')];
+    }
+
+    if (!empty($row['reopened_at'])) {
+        return ['key' => 'reopened', 'label' => __('Reopened', 'wc-abandoned-cart')];
+    }
+
+    if (!empty($row['email_sent_at'])) {
+        return ['key' => 'email-sent', 'label' => __('Email sent', 'wc-abandoned-cart')];
+    }
+
+    if ((int)($row['send_attempts'] ?? 0) >= 3) {
+        return ['key' => 'email-failed', 'label' => __('Email failed', 'wc-abandoned-cart')];
+    }
+
+    return ['key' => 'email-pending', 'label' => __('Email pending', 'wc-abandoned-cart')];
 }
 
 /**

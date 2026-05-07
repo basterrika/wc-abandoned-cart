@@ -293,6 +293,47 @@
   font-size: 13px;
 }
 
+.wc-ac-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #1d2327;
+  font-weight: 600;
+}
+
+.wc-ac-status-badge::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 0;
+  background: #e2e4e7;
+}
+
+.wc-ac-status-badge.is-recovered::before {
+  background: var(--wc-green, #1d9e74);
+}
+
+.wc-ac-status-badge.is-reopened::before {
+  background: #0a7b83;
+}
+
+.wc-ac-status-badge.is-email-sent::before {
+  background: var(--wp-components-color-accent, var(--wp-admin-theme-color, #3858e9));
+}
+
+.wc-ac-status-badge.is-email-pending::before {
+  background: var(--wc-orange, #dba617);
+}
+
+.wc-ac-status-badge.is-email-failed::before {
+  background: var(--wc-red, #d63638);
+}
+
+.wc-ac-status-badge__link {
+  margin-left: 10px;
+  font-size: 12px;
+}
+
 @media (max-width: 1400px) {
   .wc-ac-analytics__cards {
     grid-template-columns: repeat(3, minmax(0, 1fr));

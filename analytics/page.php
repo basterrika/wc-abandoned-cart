@@ -151,7 +151,7 @@ function wc_ac_render_analytics_page(): void {
                     <div class="wc-ac-analytics-chart-card__header">
                         <div>
                             <h2><?php esc_html_e('Abandoned vs recovered', 'wc-abandoned-cart'); ?></h2>
-                            <p><?php esc_html_e('Abandoned carts are plotted by reminder send date. Recovered orders are plotted by order date.', 'wc-abandoned-cart'); ?></p>
+                            <p><?php esc_html_e('Abandoned carts are plotted by auto-cancel date and include carts whose recovery email is pending or failed. Recovered orders are plotted by order date.', 'wc-abandoned-cart'); ?></p>
                             <div class="wc-ac-analytics__legend">
                                 <span class="is-abandoned"><?php esc_html_e('Abandoned carts', 'wc-abandoned-cart'); ?></span>
                                 <span class="is-recovered"><?php esc_html_e('Recovered orders', 'wc-abandoned-cart'); ?></span>
@@ -238,6 +238,118 @@ function wc_ac_render_analytics_page(): void {
                                         <td><?php echo esc_html($order['status']); ?></td>
                                         <td><?php echo wp_kses_post(wc_price((float)$order['total_sales'])); ?></td>
                                         <td><?php echo esc_html($order['date_created']); ?></td>
+                                    </tr>
+
+                                    <?php
+                                }
+
+                                ?>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <?php
+                }
+
+                ?>
+            </section>
+
+            <section class="wc-ac-analytics-table-card">
+                <div class="wc-ac-analytics-table-card__header">
+                    <div>
+                        <h2><?php esc_html_e('Recent abandoned orders', 'wc-abandoned-cart'); ?></h2>
+                        <p><?php esc_html_e('The latest abandoned carts in the selected period and where each one is in the recovery pipeline.', 'wc-abandoned-cart'); ?></p>
+                    </div>
+                </div>
+
+                <?php
+
+                if (empty($report['recent_abandoned'])) {
+                    ?>
+
+                    <div class="wc-ac-analytics__empty">
+                        <?php esc_html_e('No abandoned carts were recorded in this period.', 'wc-abandoned-cart'); ?>
+                    </div>
+
+                    <?php
+                }
+                else {
+                    ?>
+
+                    <div class="wc-ac-analytics-table-card__table">
+                        <table class="widefat fixed striped">
+                            <thead>
+                                <tr>
+                                    <th><?php esc_html_e('Order', 'wc-abandoned-cart'); ?></th>
+                                    <th><?php esc_html_e('Customer', 'wc-abandoned-cart'); ?></th>
+                                    <th><?php esc_html_e('Total', 'wc-abandoned-cart'); ?></th>
+                                    <th><?php esc_html_e('Abandoned', 'wc-abandoned-cart'); ?></th>
+                                    <th><?php esc_html_e('Recovery status', 'wc-abandoned-cart'); ?></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php
+
+                                foreach ($report['recent_abandoned'] as $row) {
+                                    $status = $row['recovery_status'];
+
+                                    ?>
+
+                                    <tr>
+                                        <td>
+                                            <?php
+
+                                            if (!empty($row['edit_url'])) {
+                                                ?>
+
+                                                <a href="<?php echo esc_url($row['edit_url']); ?>">
+                                                    #<?php echo esc_html($row['order_number']); ?>
+                                                </a>
+
+                                                <?php
+                                            }
+                                            else {
+                                                ?>
+
+                                                #<?php echo esc_html($row['order_number']); ?>
+
+                                                <?php
+                                            }
+
+                                            ?>
+                                        </td>
+                                        <td><?php echo esc_html($row['email']); ?></td>
+                                        <td><?php echo wp_kses_post(wc_price((float)$row['total'])); ?></td>
+                                        <td><?php echo esc_html($row['abandoned_at']); ?></td>
+                                        <td>
+                                            <span class="wc-ac-status-badge is-<?php echo esc_attr($status['key']); ?>">
+                                                <?php echo esc_html($status['label']); ?>
+                                            </span>
+
+                                            <?php
+
+                                            if ($status['key'] === 'recovered' && !empty($row['recovered_order_edit_url'])) {
+                                                ?>
+
+                                                <a class="wc-ac-status-badge__link" href="<?php echo esc_url($row['recovered_order_edit_url']); ?>">
+                                                    <?php
+
+                                                    echo esc_html(
+                                                        sprintf(
+                                                            /* translators: %s: recovered order number */
+                                                            __('Order #%s', 'wc-abandoned-cart'),
+                                                            $row['recovered_order_number']
+                                                        )
+                                                    );
+
+                                                    ?>
+                                                </a>
+
+                                                <?php
+                                            }
+
+                                            ?>
+                                        </td>
                                     </tr>
 
                                     <?php
