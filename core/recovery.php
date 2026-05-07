@@ -124,6 +124,7 @@ function wc_ac_handle_recovery_request(): void {
 
     $order->update_meta_data(WC_AC_META_REOPENED_AT, wc_ac_now());
     $order->delete_meta_data(WC_AC_META_TOKEN_HASH);
+    $order->add_order_note(__('Abandoned cart recovery link clicked — cart restored.', 'wc-abandoned-cart'));
     $order->save();
 
     $ttl_minutes = (int)apply_filters('wc_ac_recovery_attribution_ttl_minutes', WC_AC_RECOVERY_ATTRIBUTION_TTL_MINUTES);
