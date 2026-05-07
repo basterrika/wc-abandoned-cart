@@ -199,7 +199,7 @@ function wc_ac_render_analytics_page(): void {
                             <thead>
                                 <tr>
                                     <th><?php esc_html_e('Order', 'wc-abandoned-cart'); ?></th>
-                                    <th><?php esc_html_e('Customer', 'wc-abandoned-cart'); ?></th>
+                                    <th><?php esc_html_e('Billing email', 'wc-abandoned-cart'); ?></th>
                                     <th><?php esc_html_e('Status', 'wc-abandoned-cart'); ?></th>
                                     <th><?php esc_html_e('Total', 'wc-abandoned-cart'); ?></th>
                                     <th><?php esc_html_e('Date', 'wc-abandoned-cart'); ?></th>
@@ -281,7 +281,7 @@ function wc_ac_render_analytics_page(): void {
                             <thead>
                                 <tr>
                                     <th><?php esc_html_e('Order', 'wc-abandoned-cart'); ?></th>
-                                    <th><?php esc_html_e('Customer', 'wc-abandoned-cart'); ?></th>
+                                    <th><?php esc_html_e('Billing email', 'wc-abandoned-cart'); ?></th>
                                     <th><?php esc_html_e('Total', 'wc-abandoned-cart'); ?></th>
                                     <th><?php esc_html_e('Abandoned', 'wc-abandoned-cart'); ?></th>
                                     <th><?php esc_html_e('Recovery status', 'wc-abandoned-cart'); ?></th>

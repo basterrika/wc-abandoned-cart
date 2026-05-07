@@ -199,6 +199,65 @@ function wc_ac_orders_meta_id_column(): string {
 }
 
 /**
+ * Fetch billing emails for a set of order IDs straight from storage.
+ *
+ * Reads `wp_wc_orders.billing_email` (HPOS) or the `_billing_email` postmeta
+ * (CPT) so the value is available even when `wc_get_orders()` skips an order
+ * — e.g. trashed carts whose status falls outside `'status' => 'any'`.
+ *
+ * @param array<int, int> $order_ids
+ *
+ * @return array<int, string> Map of order_id => sanitized billing_email.
+ */
+function wc_ac_get_billing_emails_for_orders(array $order_ids): array {
+    if (empty($order_ids)) {
+        return [];
+    }
+
+    global $wpdb;
+
+    $order_ids = array_values(array_unique(array_map('absint', $order_ids)));
+    $order_ids = array_values(array_filter($order_ids, static fn(int $id) => $id > 0));
+
+    if (empty($order_ids)) {
+        return [];
+    }
+
+    $placeholders = implode(', ', array_fill(0, count($order_ids), '%d'));
+
+    if (wc_ac_orders_use_hpos()) {
+        $orders_table = $wpdb->prefix . 'wc_orders';
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Identifiers built internally; values prepared.
+        $sql = $wpdb->prepare(
+            "SELECT id AS order_id, billing_email FROM `{$orders_table}` WHERE id IN ({$placeholders})",
+            $order_ids
+        );
+    }
+    else {
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Placeholders prepared above.
+        $sql = $wpdb->prepare(
+            "SELECT post_id AS order_id, meta_value AS billing_email
+             FROM `{$wpdb->postmeta}`
+             WHERE meta_key = '_billing_email' AND post_id IN ({$placeholders})",
+            $order_ids
+        );
+    }
+
+    $results = $wpdb->get_results($sql, ARRAY_A);
+    $map = [];
+
+    foreach ((array)$results as $row) {
+        $email = sanitize_email((string)$row['billing_email']);
+
+        if ($email !== '') {
+            $map[(int)$row['order_id']] = $email;
+        }
+    }
+
+    return $map;
+}
+
+/**
  * Check whether WooCommerce Analytics order stats are available.
  */
 function wc_ac_has_analytics_order_stats_table(): bool {
@@ -757,8 +816,9 @@ function wc_ac_build_analytics_chart_data(array $period, array $abandoned_daily,
 /**
  * Prepare recent recovered orders for display.
  *
- * Batch-loads the WC_Order objects so we only run one extra query for
- * order numbers and billing emails (no N+1).
+ * Batch-loads the WC_Order objects for order numbers and fetches billing
+ * emails directly from storage so the email column is populated even for
+ * orders wc_get_orders() filters out.
  *
  * @param array<int, array<string, mixed>> $recovered_orders Recent recovered orders (limited).
  *
@@ -779,6 +839,7 @@ function wc_ac_get_recent_recovered_orders(array $recovered_orders): array {
         $order_objects[$obj->get_id()] = $obj;
     }
 
+    $billing_emails = wc_ac_get_billing_emails_for_orders($order_ids);
     $orders = [];
     $datetime_format = get_option('date_format') . ' ' . get_option('time_format');
 
@@ -789,7 +850,7 @@ function wc_ac_get_recent_recovered_orders(array $recovered_orders): array {
         $orders[] = [
             'order_id' => $order_id,
             'order_number' => $order_object ? $order_object->get_order_number() : $order_id,
-            'email' => $order_object ? sanitize_email((string)$order_object->get_billing_email()) : '',
+            'email' => $billing_emails[$order_id] ?? '',
             'status' => wc_ac_get_analytics_order_status_label((string)$order['status']),
             'date_created' => get_date_from_gmt((string)$order['date_created_gmt'], $datetime_format),
             'total_sales' => (float)$order['total_sales'],
@@ -836,6 +897,7 @@ function wc_ac_get_recent_abandoned_orders(array $rows): array {
         $order_objects[$obj->get_id()] = $obj;
     }
 
+    $billing_emails = wc_ac_get_billing_emails_for_orders($abandoned_ids);
     $datetime_format = get_option('date_format') . ' ' . get_option('time_format');
     $orders = [];
 
@@ -849,7 +911,7 @@ function wc_ac_get_recent_abandoned_orders(array $rows): array {
         $orders[] = [
             'order_id' => $order_id,
             'order_number' => $order_object ? $order_object->get_order_number() : (string)$order_id,
-            'email' => $order_object ? sanitize_email((string)$order_object->get_billing_email()) : '',
+            'email' => $billing_emails[$order_id] ?? '',
             'order_status' => wc_ac_get_analytics_order_status_label($current_status),
             'total' => $order_object ? (float)$order_object->get_total() : (float)($row['total_sales'] ?? 0),
             'abandoned_at' => get_date_from_gmt((string)$row['abandoned_at'], $datetime_format),
