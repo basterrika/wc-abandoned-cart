@@ -428,7 +428,7 @@ function wc_ac_render_analytics_chart_svg(array $labels, array $primary, array $
     $point_count = count($labels);
     $step_x = $point_count > 1 ? $plot_width / ($point_count - 1) : $plot_width;
     $all_values = $secondary ? array_merge($primary, $secondary) : $primary;
-    $max_value = wc_ac_get_analytics_chart_max($all_values);
+    $max_value = wc_ac_get_analytics_chart_max($all_values, $mode === 'count');
     $grid_steps = 4;
     $grid_markup = '';
     $bars_markup = '';
@@ -535,12 +535,18 @@ function wc_ac_render_analytics_chart_svg(array $labels, array $primary, array $
  * Return a rounded chart maximum.
  *
  * @param array<int, int|float> $values Series values.
+ * @param bool $integer Whether the axis represents whole-number counts.
  */
-function wc_ac_get_analytics_chart_max(array $values): float {
+function wc_ac_get_analytics_chart_max(array $values, bool $integer = false): float {
     $raw_max = max(array_map('floatval', $values));
 
     if ($raw_max <= 0) {
         return 1.0;
+    }
+
+    if ($integer) {
+        // Round up to a multiple of the grid step count (4) so every axis label is a whole number.
+        return (float) ((int) ceil(max(1.0, $raw_max) / 4) * 4);
     }
 
     $scaled = $raw_max * 1.1;
