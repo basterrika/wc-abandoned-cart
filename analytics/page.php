@@ -472,25 +472,32 @@ function wc_ac_render_analytics_chart_svg(array $labels, array $primary, array $
             );
         }
         else {
+            $secondary_value = isset($secondary[$index]) ? (float)$secondary[$index] : 0.0;
+            $tooltip = '<title>' . esc_html(sprintf(
+                /* translators: 1: localized date, 2: abandoned cart count, 3: recovered order count */
+                __('%1$s — Abandoned: %2$s, Recovered: %3$s', 'wc-abandoned-cart'),
+                $label,
+                number_format_i18n((int)$primary_value),
+                number_format_i18n((int)$secondary_value)
+            )) . '</title>';
             $bars_markup .= sprintf(
-                '<rect x="%1$s" y="%2$s" width="%3$s" height="%4$s" rx="0" class="wc-ac-chart__bar is-abandoned" />',
+                '<rect x="%1$s" y="%2$s" width="%3$s" height="%4$s" rx="0" class="wc-ac-chart__bar is-abandoned">%5$s</rect>',
                 esc_attr((string)round($x - ($bar_width / 2), 2)),
                 esc_attr((string)round($primary_y, 2)),
                 esc_attr((string)round($bar_width, 2)),
-                esc_attr((string)round(($padding_top + $plot_height) - $primary_y, 2))
+                esc_attr((string)round(($padding_top + $plot_height) - $primary_y, 2)),
+                $tooltip
             );
-        }
 
-        if ($mode === 'count' && isset($secondary[$index])) {
-            $secondary_value = (float)$secondary[$index];
             $secondary_y = $padding_top + $plot_height - (($secondary_value / $max_value) * $plot_height);
             $line_points[] = round($x, 2) . ',' . round($secondary_y, 2);
 
             if ($point_count <= 31) {
                 $points_markup .= sprintf(
-                    '<circle cx="%1$s" cy="%2$s" r="3" class="wc-ac-chart__point" />',
+                    '<circle cx="%1$s" cy="%2$s" r="3" class="wc-ac-chart__point">%3$s</circle>',
                     esc_attr((string)round($x, 2)),
-                    esc_attr((string)round($secondary_y, 2))
+                    esc_attr((string)round($secondary_y, 2)),
+                    $tooltip
                 );
             }
         }
