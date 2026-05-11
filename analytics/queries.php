@@ -51,8 +51,9 @@ function wc_ac_get_analytics_range_days(): int {
  */
 function wc_ac_get_analytics_custom_dates(): array {
     $timezone = wp_timezone();
-    $today = (new DateTimeImmutable('now', $timezone))->format('Y-m-d');
-    $default_start = (new DateTimeImmutable('now', $timezone))->modify('-29 days')->format('Y-m-d');
+    $now = new DateTimeImmutable('now', $timezone);
+    $today = $now->format('Y-m-d');
+    $default_start = $now->modify('-29 days')->format('Y-m-d');
 
     if (isset($_GET['start'], $_GET['end'])) {
         $nonce = isset($_GET['_wpnonce']) ? sanitize_text_field(wp_unslash($_GET['_wpnonce'])) : '';
@@ -78,6 +79,16 @@ function wc_ac_get_analytics_custom_dates(): array {
         $end_date = new DateTimeImmutable($end, $timezone);
     }
 
+    if ($start > $today) {
+        $start = $today;
+        $start_date = new DateTimeImmutable($start, $timezone);
+    }
+
+    if ($end > $today) {
+        $end = $today;
+        $end_date = new DateTimeImmutable($end, $timezone);
+    }
+
     if ($start_date > $end_date) {
         [$start, $end] = [$end, $start];
         [$start_date, $end_date] = [$end_date, $start_date];
@@ -86,7 +97,8 @@ function wc_ac_get_analytics_custom_dates(): array {
     $diff = (int)$start_date->diff($end_date)->days;
 
     if ($diff > 365) {
-        $start = $end_date->modify('-365 days')->format('Y-m-d');
+        $start_date = $end_date->modify('-365 days');
+        $start = $start_date->format('Y-m-d');
     }
 
     return ['start' => $start, 'end' => $end];

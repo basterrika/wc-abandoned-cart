@@ -48,6 +48,7 @@ function wc_ac_render_analytics_page(): void {
                     $is_custom = $report['range_days'] === 'custom';
                     $start_value = $period['start_local']->format('Y-m-d');
                     $end_value = $period['end_local']->format('Y-m-d');
+                    $today_value = new DateTimeImmutable('now', wp_timezone())->format('Y-m-d');
                     $date_range_nonce = wp_create_nonce('wc_ac_date_range');
 
                     ?>
@@ -57,7 +58,7 @@ function wc_ac_render_analytics_page(): void {
                             type="date"
                             id="wc-ac-range-start"
                             value="<?php echo esc_attr($start_value); ?>"
-                            max="<?php echo esc_attr($end_value); ?>"
+                            max="<?php echo esc_attr(min($end_value, $today_value)); ?>"
                             aria-label="<?php esc_attr_e('Start date', 'wc-abandoned-cart'); ?>"
                             data-base-url="<?php echo esc_attr(admin_url('admin.php?page=wc-ac-cart-recovery')); ?>"
                             data-nonce="<?php echo esc_attr($date_range_nonce); ?>"
@@ -68,6 +69,7 @@ function wc_ac_render_analytics_page(): void {
                             id="wc-ac-range-end"
                             value="<?php echo esc_attr($end_value); ?>"
                             min="<?php echo esc_attr($start_value); ?>"
+                            max="<?php echo esc_attr($today_value); ?>"
                             aria-label="<?php esc_attr_e('End date', 'wc-abandoned-cart'); ?>"
                         />
                     </span>
