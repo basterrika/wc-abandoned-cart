@@ -259,8 +259,8 @@ function wc_ac_render_analytics_page(): void {
             <section class="wc-ac-analytics-table-card">
                 <div class="wc-ac-analytics-table-card__header">
                     <div>
-                        <h2><?php esc_html_e('Recent abandoned orders', 'wc-abandoned-cart'); ?></h2>
-                        <p><?php esc_html_e('The latest abandoned carts in the selected period and where each one is in the recovery pipeline.', 'wc-abandoned-cart'); ?></p>
+                        <h2><?php esc_html_e('Abandoned orders', 'wc-abandoned-cart'); ?></h2>
+                        <p><?php esc_html_e('Abandoned carts in the selected period and where each one is in the recovery pipeline.', 'wc-abandoned-cart'); ?></p>
                     </div>
                 </div>
 
@@ -360,6 +360,8 @@ function wc_ac_render_analytics_page(): void {
                                 ?>
                             </tbody>
                         </table>
+
+                        <?php wc_ac_render_abandoned_pagination($report['abandoned_pagination']); ?>
                     </div>
 
                     <?php
@@ -369,6 +371,102 @@ function wc_ac_render_analytics_page(): void {
             </section>
 
             <p class="wc-ac-analytics__note"><?php esc_html_e('Reopened carts count abandoned carts from the selected period that were reopened from a recovery email at least once. Recovered orders count only valid orders created from a recovery link in the selected period. Recovery rate is based on carts that became abandoned in the selected period.', 'wc-abandoned-cart'); ?></p>
+        </div>
+    </div>
+
+    <?php
+}
+
+/**
+ * Render the abandoned-orders pagination row.
+ *
+ * @param array{current_page: int, total_pages: int, per_page: int, total_items: int} $pagination
+ */
+function wc_ac_render_abandoned_pagination(array $pagination): void {
+    $total_pages = (int)$pagination['total_pages'];
+
+    if ($total_pages <= 1) {
+        return;
+    }
+
+    $current_page = (int)$pagination['current_page'];
+    $total_items = (int)$pagination['total_items'];
+    $current_url = remove_query_arg('paged');
+    $page_links = [];
+
+    if ($current_page <= 2) {
+        $page_links[] = '<span class="tablenav-pages-navspan button disabled" aria-hidden="true">&laquo;</span>';
+    }
+    else {
+        $page_links[] = sprintf(
+            '<a class="first-page button" href="%1$s"><span class="screen-reader-text">%2$s</span><span aria-hidden="true">&laquo;</span></a>',
+            esc_url(remove_query_arg('paged', $current_url)),
+            esc_html__('First page', 'wc-abandoned-cart')
+        );
+    }
+
+    if ($current_page <= 1) {
+        $page_links[] = '<span class="tablenav-pages-navspan button disabled" aria-hidden="true">&lsaquo;</span>';
+    }
+    else {
+        $page_links[] = sprintf(
+            '<a class="prev-page button" href="%1$s"><span class="screen-reader-text">%2$s</span><span aria-hidden="true">&lsaquo;</span></a>',
+            esc_url(add_query_arg('paged', $current_page - 1, $current_url)),
+            esc_html__('Previous page', 'wc-abandoned-cart')
+        );
+    }
+
+    $page_links[] = sprintf(
+        '<span class="screen-reader-text">%1$s</span><span class="paging-input"><span class="tablenav-paging-text">%2$s</span></span>',
+        esc_html__('Current page', 'wc-abandoned-cart'),
+        sprintf(
+            /* translators: 1: current page number, 2: total pages count */
+            esc_html_x('%1$s of %2$s', 'paging', 'wc-abandoned-cart'),
+            esc_html(number_format_i18n($current_page)),
+            '<span class="total-pages">' . esc_html(number_format_i18n($total_pages)) . '</span>'
+        )
+    );
+
+    if ($current_page >= $total_pages) {
+        $page_links[] = '<span class="tablenav-pages-navspan button disabled" aria-hidden="true">&rsaquo;</span>';
+    }
+    else {
+        $page_links[] = sprintf(
+            '<a class="next-page button" href="%1$s"><span class="screen-reader-text">%2$s</span><span aria-hidden="true">&rsaquo;</span></a>',
+            esc_url(add_query_arg('paged', $current_page + 1, $current_url)),
+            esc_html__('Next page', 'wc-abandoned-cart')
+        );
+    }
+
+    if ($current_page >= $total_pages - 1) {
+        $page_links[] = '<span class="tablenav-pages-navspan button disabled" aria-hidden="true">&raquo;</span>';
+    }
+    else {
+        $page_links[] = sprintf(
+            '<a class="last-page button" href="%1$s"><span class="screen-reader-text">%2$s</span><span aria-hidden="true">&raquo;</span></a>',
+            esc_url(add_query_arg('paged', $total_pages, $current_url)),
+            esc_html__('Last page', 'wc-abandoned-cart')
+        );
+    }
+
+    ?>
+
+    <div class="tablenav bottom">
+        <div class="tablenav-pages">
+            <span class="displaying-num">
+                <?php
+
+                printf(
+                    esc_html(
+                        /* translators: %s: number of abandoned cart items */
+                        _n('%s item', '%s items', $total_items, 'wc-abandoned-cart')
+                    ),
+                    esc_html(number_format_i18n($total_items))
+                );
+
+                ?>
+            </span>
+            <span class="pagination-links"><?php echo implode("\n", $page_links); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Each link is built from escaped URLs and translator strings. ?></span>
         </div>
     </div>
 

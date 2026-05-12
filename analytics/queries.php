@@ -154,8 +154,18 @@ function wc_ac_get_analytics_report($days): array {
     $cohort_reopened_count = wc_ac_get_analytics_reopened_count_for_abandoned_period($period);
     $cohort_recovered_count = wc_ac_get_analytics_recovered_count_for_abandoned_period($period);
     $chart = wc_ac_build_analytics_chart_data($period, $abandoned_daily, $recovered_agg['daily']);
-    $abandoned_count = array_sum($abandoned_daily);
+    $abandoned_count = (int)array_sum($abandoned_daily);
     $current_abandoned = wc_ac_get_current_abandoned_summary();
+
+    $abandoned_per_page = 20;
+    $abandoned_total_pages = max(1, (int)ceil($abandoned_count / $abandoned_per_page));
+    $abandoned_current_page = isset($_GET['paged']) ? max(1, absint(wp_unslash($_GET['paged']))) : 1;
+
+    if ($abandoned_current_page > $abandoned_total_pages) {
+        $abandoned_current_page = $abandoned_total_pages;
+    }
+
+    $abandoned_offset = ($abandoned_current_page - 1) * $abandoned_per_page;
 
     return [
         'range_days' => $is_custom ? 'custom' : $period['days'],
@@ -174,8 +184,14 @@ function wc_ac_get_analytics_report($days): array {
             wc_ac_get_analytics_recent_recovered($period)
         ),
         'recent_abandoned' => wc_ac_get_recent_abandoned_orders(
-            wc_ac_get_analytics_recent_abandoned($period)
+            wc_ac_get_analytics_recent_abandoned($period, $abandoned_per_page, $abandoned_offset)
         ),
+        'abandoned_pagination' => [
+            'current_page' => $abandoned_current_page,
+            'total_pages' => $abandoned_total_pages,
+            'per_page' => $abandoned_per_page,
+            'total_items' => $abandoned_count,
+        ],
     ];
 }
 
@@ -552,8 +568,11 @@ function wc_ac_get_analytics_recent_recovered(array $period, int $limit = 10): a
  *
  * @return array<int, array<string, mixed>>
  */
-function wc_ac_get_analytics_recent_abandoned(array $period, int $limit = 25): array {
+function wc_ac_get_analytics_recent_abandoned(array $period, int $limit = 20, int $offset = 0): array {
     global $wpdb;
+
+    $limit = max(1, min(200, $limit));
+    $offset = max(0, $offset);
 
     $meta_table = wc_ac_orders_meta_table();
     $id_col = wc_ac_orders_meta_id_column();
@@ -569,7 +588,7 @@ function wc_ac_get_analytics_recent_abandoned(array $period, int $limit = 25): a
 
         $stats_select = 'stats.total_sales, stats.status AS order_status, recovered_stats.order_id AS valid_recovered_order_id';
         $stats_join = "LEFT JOIN `{$order_stats_table}` stats
-            ON stats.order_id = m_abandoned.{$id_col}
+            ON stats.order_id = abandoned.order_id
             AND stats.parent_id = 0";
         $recovered_stats_join = "LEFT JOIN `{$order_stats_table}` recovered_stats
             ON recovered_stats.order_id = CAST(m_recovered.meta_value AS UNSIGNED)
@@ -578,48 +597,50 @@ function wc_ac_get_analytics_recent_abandoned(array $period, int $limit = 25): a
         $extra_params = $excluded_statuses;
     }
 
-    // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Identifiers built internally.
     $sql = $wpdb->prepare(
-        "SELECT m_abandoned.{$id_col} AS order_id,
-                m_abandoned.meta_value AS abandoned_at,
+        "SELECT abandoned.order_id AS order_id,
+                abandoned.abandoned_at AS abandoned_at,
                 m_email.meta_value AS email_sent_at,
                 m_attempts.meta_value AS send_attempts,
                 m_reopened.meta_value AS reopened_at,
                 {$stats_select}
-        FROM `{$meta_table}` m_abandoned
+        FROM (
+            SELECT {$id_col} AS order_id, meta_value AS abandoned_at
+            FROM `{$meta_table}`
+            WHERE meta_key = %s
+                AND meta_value >= %s
+                AND meta_value <= %s
+            ORDER BY meta_value DESC, {$id_col} DESC
+            LIMIT %d OFFSET %d
+        ) abandoned
         LEFT JOIN `{$meta_table}` m_email
-            ON m_email.{$id_col} = m_abandoned.{$id_col}
+            ON m_email.{$id_col} = abandoned.order_id
             AND m_email.meta_key = %s
         LEFT JOIN `{$meta_table}` m_attempts
-            ON m_attempts.{$id_col} = m_abandoned.{$id_col}
+            ON m_attempts.{$id_col} = abandoned.order_id
             AND m_attempts.meta_key = %s
         LEFT JOIN `{$meta_table}` m_reopened
-            ON m_reopened.{$id_col} = m_abandoned.{$id_col}
+            ON m_reopened.{$id_col} = abandoned.order_id
             AND m_reopened.meta_key = %s
         LEFT JOIN `{$meta_table}` m_recovered
-            ON m_recovered.{$id_col} = m_abandoned.{$id_col}
+            ON m_recovered.{$id_col} = abandoned.order_id
             AND m_recovered.meta_key = %s
         {$stats_join}
         {$recovered_stats_join}
-        WHERE m_abandoned.meta_key = %s
-            AND m_abandoned.meta_value >= %s
-            AND m_abandoned.meta_value <= %s
-        ORDER BY m_abandoned.meta_value DESC
-        LIMIT %d",
+        ORDER BY abandoned.abandoned_at DESC, abandoned.order_id DESC",
         ...array_merge(
-            [
-                WC_AC_META_EMAIL_SENT_AT,
-                WC_AC_META_SEND_ATTEMPTS,
-                WC_AC_META_REOPENED_AT,
-                WC_AC_META_RECOVERED_ORDER,
-            ],
-            $extra_params,
             [
                 WC_AC_META_ABANDONED_AT,
                 (string)$period['start_gmt'],
                 (string)$period['end_gmt'],
                 $limit,
-            ]
+                $offset,
+                WC_AC_META_EMAIL_SENT_AT,
+                WC_AC_META_SEND_ATTEMPTS,
+                WC_AC_META_REOPENED_AT,
+                WC_AC_META_RECOVERED_ORDER,
+            ],
+            $extra_params
         )
     );
 
