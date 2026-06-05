@@ -321,12 +321,20 @@
   background: var(--wp-components-color-accent, var(--wp-admin-theme-color, #3858e9));
 }
 
+.wc-ac-status-badge.is-email-2-sent::before {
+  background: #720eec;
+}
+
 .wc-ac-status-badge.is-email-pending::before {
   background: var(--wc-orange, #dba617);
 }
 
 .wc-ac-status-badge.is-email-failed::before {
   background: var(--wc-red, #d63638);
+}
+
+.wc-ac-status-badge.is-email-2-failed::before {
+  background: #b32d2e;
 }
 
 .wc-ac-status-badge__link {

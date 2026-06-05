@@ -6,9 +6,9 @@ class WC_AC_Email_Abandoned_Cart extends WC_Email {
     protected string $recovery_url = '';
 
     public function __construct() {
-        $this->id = 'wc_ac_abandoned_cart';
-        $this->title = __('Abandoned cart reminder', 'wc-abandoned-cart');
-        $this->description = __('Send a reminder when an unpaid order is auto-cancelled by WooCommerce.', 'wc-abandoned-cart');
+        $this->id = $this->define_id();
+        $this->title = $this->define_title();
+        $this->description = $this->define_description();
         $this->customer_email = true;
         $this->manual = false;
         $this->placeholders = [
@@ -19,6 +19,18 @@ class WC_AC_Email_Abandoned_Cart extends WC_Email {
         parent::__construct();
 
         add_filter('woocommerce_prepare_email_for_preview', [$this, 'prepare_for_preview']);
+    }
+
+    protected function define_id(): string {
+        return 'wc_ac_abandoned_cart';
+    }
+
+    protected function define_title(): string {
+        return __('Abandoned cart reminder', 'wc-abandoned-cart');
+    }
+
+    protected function define_description(): string {
+        return __('Send a reminder when an unpaid order is auto-cancelled by WooCommerce.', 'wc-abandoned-cart');
     }
 
     public function get_default_subject(): string {

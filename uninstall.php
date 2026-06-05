@@ -8,3 +8,4 @@ if (function_exists('as_unschedule_all_actions')) {
 
 delete_option('wc_ac_enabled');
 delete_option('wc_ac_recovery_email_delay_minutes');
+delete_option('wc_ac_recovery_email_2_delay_minutes');

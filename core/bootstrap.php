@@ -7,9 +7,12 @@ const WC_AC_ACTION_GROUP = 'wc-abandoned-cart';
 const WC_AC_SEND_EMAIL_HOOK = 'wc_abandoned_cart_send_recovery_email';
 const WC_AC_OPTION_ENABLED = 'wc_ac_enabled';
 const WC_AC_OPTION_EMAIL_DELAY = 'wc_ac_recovery_email_delay_minutes';
+const WC_AC_OPTION_EMAIL_2_DELAY = 'wc_ac_recovery_email_2_delay_minutes';
 const WC_AC_META_ABANDONED_AT = '_wc_ac_abandoned_at';
 const WC_AC_META_EMAIL_SENT_AT = '_wc_ac_email_sent_at';
 const WC_AC_META_SEND_ATTEMPTS = '_wc_ac_send_attempts';
+const WC_AC_META_EMAIL_2_SENT_AT = '_wc_ac_email_2_sent_at';
+const WC_AC_META_EMAIL_2_SEND_ATTEMPTS = '_wc_ac_email_2_send_attempts';
 const WC_AC_META_TOKEN_HASH = '_wc_ac_recovery_token_hash';
 const WC_AC_META_REOPENED_AT = '_wc_ac_reopened_at';
 const WC_AC_META_RECOVERED_AT = '_wc_ac_recovered_at';
@@ -40,8 +43,10 @@ add_action('plugins_loaded', static function() {
 
 function wc_ac_register_email_class($emails) {
     require_once WC_AC_PATH . 'email/class-email.php';
+    require_once WC_AC_PATH . 'email/class-email-second.php';
 
     $emails['wc_ac_abandoned_cart'] = new WC_AC_Email_Abandoned_Cart();
+    $emails['wc_ac_abandoned_cart_2'] = new WC_AC_Email_Abandoned_Cart_Second();
 
     return $emails;
 }

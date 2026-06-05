@@ -124,7 +124,16 @@ function wc_ac_handle_recovery_request(): void {
 
     $order->update_meta_data(WC_AC_META_REOPENED_AT, wc_ac_now());
     $order->delete_meta_data(WC_AC_META_TOKEN_HASH);
-    $order->add_order_note(__('Abandoned cart recovery link clicked — cart restored.', 'wc-abandoned-cart'));
+
+    // Each send rotates the token, so the link that just matched belongs to the
+    // most recently sent reminder: a second email having gone out means this
+    // click came from it. (A failed second send never sets EMAIL_2_SENT_AT and
+    // restores the first link, so the two always agree.)
+    $reopen_note = $order->get_meta(WC_AC_META_EMAIL_2_SENT_AT) !== ''
+        ? __('Abandoned cart recovery link clicked (second email) — cart restored.', 'wc-abandoned-cart')
+        : __('Abandoned cart recovery link clicked (first email) — cart restored.', 'wc-abandoned-cart');
+
+    $order->add_order_note($reopen_note);
     $order->save();
 
     $ttl_minutes = (int)apply_filters('wc_ac_recovery_attribution_ttl_minutes', WC_AC_RECOVERY_ATTRIBUTION_TTL_MINUTES);
@@ -293,10 +302,17 @@ function wc_ac_find_order_by_recovery_token(string $token): ?WC_Order {
 }
 
 function wc_ac_recovery_token_is_expired(WC_Order $order): bool {
-    // Anchor TTL to EMAIL_SENT_AT, falling back to ABANDONED_AT in the rare
-    // case where the post-send save of EMAIL_SENT_AT failed: the link is
-    // already in the customer's inbox and shouldn't die over a missed write.
-    $anchor = (string)$order->get_meta(WC_AC_META_EMAIL_SENT_AT);
+    // Anchor the TTL to the most recent reminder send: each send rotates in a
+    // fresh token, so a second reminder's link should live a full TTL from when
+    // it was issued, not from the first reminder. Fall back to the first send,
+    // then to ABANDONED_AT, covering the rare case where the post-send save of a
+    // sent-at timestamp failed — the link is already in the customer's inbox and
+    // shouldn't die over a missed write.
+    $anchor = (string)$order->get_meta(WC_AC_META_EMAIL_2_SENT_AT);
+
+    if ($anchor === '') {
+        $anchor = (string)$order->get_meta(WC_AC_META_EMAIL_SENT_AT);
+    }
 
     if ($anchor === '') {
         $anchor = (string)$order->get_meta(WC_AC_META_ABANDONED_AT);

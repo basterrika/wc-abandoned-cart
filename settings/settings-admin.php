@@ -24,6 +24,10 @@ function wc_ac_save_settings_tab(): void {
         $_POST[WC_AC_OPTION_EMAIL_DELAY] = max(1, min(absint(wp_unslash($_POST[WC_AC_OPTION_EMAIL_DELAY])), 10080));
     }
 
+    if (isset($_POST[WC_AC_OPTION_EMAIL_2_DELAY])) {
+        $_POST[WC_AC_OPTION_EMAIL_2_DELAY] = max(1, min(absint(wp_unslash($_POST[WC_AC_OPTION_EMAIL_2_DELAY])), 10080));
+    }
+
     WC_Admin_Settings::save_fields(wc_ac_get_settings_fields());
 }
 
@@ -55,6 +59,19 @@ function wc_ac_get_settings_fields(): array {
                 'step' => 1,
             ],
             'desc' => __('How long to wait after the order is cancelled before the recovery email is sent.', 'wc-abandoned-cart'),
+        ],
+        [
+            'title' => __('Second recovery email delay (minutes)', 'wc-abandoned-cart'),
+            'id' => WC_AC_OPTION_EMAIL_2_DELAY,
+            'type' => 'number',
+            'default' => '1440',
+            'autoload' => true,
+            'custom_attributes' => [
+                'min' => 1,
+                'max' => 10080,
+                'step' => 1,
+            ],
+            'desc' => __('How long to wait after the first recovery email before sending a second one. The second email is sent only if the cart has not been recovered, and must be enabled in WooCommerce > Settings > Emails > Abandoned cart reminder (second).', 'wc-abandoned-cart'),
         ],
         [
             'type' => 'sectionend',

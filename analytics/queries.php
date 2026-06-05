@@ -601,7 +601,9 @@ function wc_ac_get_analytics_recent_abandoned(array $period, int $limit = 20, in
         "SELECT abandoned.order_id AS order_id,
                 abandoned.abandoned_at AS abandoned_at,
                 m_email.meta_value AS email_sent_at,
+                m_email2.meta_value AS email_2_sent_at,
                 m_attempts.meta_value AS send_attempts,
+                m_attempts2.meta_value AS email_2_send_attempts,
                 m_reopened.meta_value AS reopened_at,
                 {$stats_select}
         FROM (
@@ -616,9 +618,15 @@ function wc_ac_get_analytics_recent_abandoned(array $period, int $limit = 20, in
         LEFT JOIN `{$meta_table}` m_email
             ON m_email.{$id_col} = abandoned.order_id
             AND m_email.meta_key = %s
+        LEFT JOIN `{$meta_table}` m_email2
+            ON m_email2.{$id_col} = abandoned.order_id
+            AND m_email2.meta_key = %s
         LEFT JOIN `{$meta_table}` m_attempts
             ON m_attempts.{$id_col} = abandoned.order_id
             AND m_attempts.meta_key = %s
+        LEFT JOIN `{$meta_table}` m_attempts2
+            ON m_attempts2.{$id_col} = abandoned.order_id
+            AND m_attempts2.meta_key = %s
         LEFT JOIN `{$meta_table}` m_reopened
             ON m_reopened.{$id_col} = abandoned.order_id
             AND m_reopened.meta_key = %s
@@ -636,7 +644,9 @@ function wc_ac_get_analytics_recent_abandoned(array $period, int $limit = 20, in
                 $limit,
                 $offset,
                 WC_AC_META_EMAIL_SENT_AT,
+                WC_AC_META_EMAIL_2_SENT_AT,
                 WC_AC_META_SEND_ATTEMPTS,
+                WC_AC_META_EMAIL_2_SEND_ATTEMPTS,
                 WC_AC_META_REOPENED_AT,
                 WC_AC_META_RECOVERED_ORDER,
             ],
@@ -741,8 +751,10 @@ function wc_ac_get_analytics_recovered_count_for_abandoned_period(array $period)
  * exists, and the original order is still cancelled. Revenue comes from
  * wc_order_stats.total_sales (denormalized order total).
  *
- * The cutoff arithmetic mirrors wc_ac_recovery_token_is_expired() so a cart
- * counted here is guaranteed to accept the recovery link if clicked now.
+ * The cutoff is measured against the most recent reminder send (the second
+ * email when one went out, otherwise the first), mirroring the anchor in
+ * wc_ac_recovery_token_is_expired() so a cart counted here is guaranteed to
+ * accept the recovery link if clicked now.
  *
  * @return array{count: int, revenue: float}
  */
@@ -776,6 +788,9 @@ function wc_ac_get_current_abandoned_summary(): array {
                 AND m_token.meta_key = %s
             INNER JOIN `{$order_stats_table}` stats
                 ON stats.order_id = m_sent.{$id_col}
+            LEFT JOIN `{$meta_table}` m_sent2
+                ON m_sent2.{$id_col} = m_sent.{$id_col}
+                AND m_sent2.meta_key = %s
             LEFT JOIN `{$meta_table}` m_reopen
                 ON m_reopen.{$id_col} = m_sent.{$id_col}
                 AND m_reopen.meta_key = %s
@@ -783,12 +798,13 @@ function wc_ac_get_current_abandoned_summary(): array {
                 ON m_rec.{$id_col} = m_sent.{$id_col}
                 AND m_rec.meta_key = %s
             WHERE m_sent.meta_key = %s
-                AND m_sent.meta_value >= %s
+                AND COALESCE(m_sent2.meta_value, m_sent.meta_value) >= %s
                 AND m_reopen.{$id_col} IS NULL
                 AND m_rec.{$id_col} IS NULL
                 AND stats.parent_id = 0
                 AND stats.status = %s",
             WC_AC_META_TOKEN_HASH,
+            WC_AC_META_EMAIL_2_SENT_AT,
             WC_AC_META_REOPENED_AT,
             WC_AC_META_RECOVERED_ORDER,
             WC_AC_META_EMAIL_SENT_AT,
@@ -962,14 +978,18 @@ function wc_ac_get_recent_abandoned_orders(array $rows): array {
  * Map an abandoned-order row to its recovery pipeline state.
  *
  * States are mutually exclusive and evaluated in order of how far the cart
- * progressed: recovered > reopened > email-sent > email-failed > email-pending.
+ * progressed: recovered > reopened > second email sent > second email failed >
+ * first email sent > first email failed > email-pending. The email stage is
+ * split by the latest reminder to reach a terminal outcome, so the column shows
+ * whether the first or second email was delivered or exhausted its retries.
  * "Recovered" relies on `valid_recovered_order_id`, which the SQL only
  * populates when the replacement order would also count in the rest of the
  * report (parent_id=0 and not in an excluded status). A cart whose
  * replacement is pending, failed, cancelled, trashed, or deleted therefore
  * falls back to "Reopened" — the customer did reopen the cart, the order
- * just isn't counted. "email-failed" requires the retry budget to be
- * exhausted (3 attempts) so a cart still mid-retry shows as "email-pending".
+ * just isn't counted. A "failed" state (either email) requires that email's
+ * retry budget to be exhausted (3 attempts), so a reminder still mid-retry
+ * shows its prior milestone rather than a failure.
  *
  * @param array<string, mixed> $row Row from wc_ac_get_analytics_recent_abandoned().
  *
@@ -984,12 +1004,20 @@ function wc_ac_get_recovery_pipeline_status(array $row): array {
         return ['key' => 'reopened', 'label' => __('Reopened', 'wc-abandoned-cart')];
     }
 
+    if (!empty($row['email_2_sent_at'])) {
+        return ['key' => 'email-2-sent', 'label' => __('Second email sent', 'wc-abandoned-cart')];
+    }
+
+    if ((int)($row['email_2_send_attempts'] ?? 0) >= 3) {
+        return ['key' => 'email-2-failed', 'label' => __('Second email failed', 'wc-abandoned-cart')];
+    }
+
     if (!empty($row['email_sent_at'])) {
-        return ['key' => 'email-sent', 'label' => __('Email sent', 'wc-abandoned-cart')];
+        return ['key' => 'email-sent', 'label' => __('First email sent', 'wc-abandoned-cart')];
     }
 
     if ((int)($row['send_attempts'] ?? 0) >= 3) {
-        return ['key' => 'email-failed', 'label' => __('Email failed', 'wc-abandoned-cart')];
+        return ['key' => 'email-failed', 'label' => __('First email failed', 'wc-abandoned-cart')];
     }
 
     return ['key' => 'email-pending', 'label' => __('Email pending', 'wc-abandoned-cart')];
