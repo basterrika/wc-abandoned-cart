@@ -14,7 +14,7 @@ defined('ABSPATH') || exit;
 add_action('woocommerce_checkout_order_processed', 'wc_ac_capture_cart_snapshot');
 add_action('woocommerce_store_api_checkout_order_processed', 'wc_ac_capture_cart_snapshot');
 function wc_ac_capture_cart_snapshot($arg): void {
-    if (!wc_ac_is_enabled() || !function_exists('WC')) {
+    if (!wc_ac_is_enabled()) {
         return;
     }
 
@@ -110,38 +110,25 @@ function wc_ac_cleanup_cart_snapshots(): void {
     }
 }
 
-add_action('template_redirect', 'wc_ac_maybe_handle_recovery', 1);
-function wc_ac_maybe_handle_recovery(): void {
-    if (empty($_GET['wc_ac_recover'])) {
-        return;
-    }
-
-    wc_ac_handle_recovery_request();
-}
-
 /**
  * Handle the `?wc_ac_recover=<token>` URL on the front-end.
  *
  * Looks up the cancelled order by token hash, restores its line items into
  * the live cart, marks the order as reopened, and redirects to checkout.
  */
+add_action('template_redirect', 'wc_ac_handle_recovery_request', 1);
 function wc_ac_handle_recovery_request(): void {
-    if (is_admin() || wp_doing_ajax()) {
+    if (empty($_GET['wc_ac_recover'])) {
         return;
     }
 
     $token = sanitize_text_field(wp_unslash($_GET['wc_ac_recover']));
 
-    if ($token === '' || !function_exists('WC')) {
+    if ($token === '') {
         return;
     }
 
     $woocommerce = WC();
-
-    if (function_exists('wc_load_cart') && did_action('woocommerce_init') && (!$woocommerce->cart || !$woocommerce->session)) {
-        wc_load_cart();
-    }
-
     $cart = $woocommerce->cart;
     $session = $woocommerce->session;
 
@@ -236,10 +223,6 @@ function wc_ac_handle_recovery_request(): void {
 add_action('woocommerce_checkout_order_processed', 'wc_ac_maybe_complete_recovery');
 add_action('woocommerce_store_api_checkout_order_processed', 'wc_ac_maybe_complete_recovery');
 function wc_ac_maybe_complete_recovery($arg): void {
-    if (!function_exists('WC')) {
-        return;
-    }
-
     $session = WC()->session;
 
     if (!$session) {
@@ -465,10 +448,6 @@ function wc_ac_restore_cart_from_order(WC_Order $order): array {
     $woocommerce = WC();
     $cart = $woocommerce->cart;
     $session = $woocommerce->session;
-
-    if (!$cart || !$session) {
-        return ['restored' => 0, 'failed' => $failed, 'fingerprint' => []];
-    }
 
     // Capture live state for rollback: add_to_cart() can still reject every planned
     // item via deeper stock checks, quantity rules, or third-party validation hooks.

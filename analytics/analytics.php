@@ -48,7 +48,7 @@ function wc_ac_register_analytics_page(): void {
         }
     );
 
-    if (!$hook_suffix || !function_exists('wc_admin_connect_page')) {
+    if (!$hook_suffix) {
         return;
     }
 

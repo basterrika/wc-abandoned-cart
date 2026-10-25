@@ -26,10 +26,6 @@ const WC_AC_FILE = __FILE__;
 define('WC_AC_PATH', plugin_dir_path(__FILE__));
 
 add_action('before_woocommerce_init', static function() {
-    if (!class_exists(FeaturesUtil::class)) {
-        return;
-    }
-
     FeaturesUtil::declare_compatibility('custom_order_tables', WC_AC_FILE);
     FeaturesUtil::declare_compatibility('cart_checkout_blocks', WC_AC_FILE);
 });

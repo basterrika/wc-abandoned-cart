@@ -44,16 +44,8 @@ function wc_ac_capture_unpaid_cancel_intent($cancel, $order) {
 }
 
 add_action('woocommerce_order_status_cancelled', 'wc_ac_handle_order_cancelled', 10, 2);
-function wc_ac_handle_order_cancelled($order_id, $order): void {
+function wc_ac_handle_order_cancelled($order_id, WC_Order $order): void {
     if (!WC_AC_Unpaid_Cancel_State::consume((int)$order_id)) {
-        return;
-    }
-
-    if (!$order instanceof WC_Order) {
-        $order = wc_get_order($order_id);
-    }
-
-    if (!$order instanceof WC_Order) {
         return;
     }
 
@@ -68,14 +60,8 @@ function wc_ac_handle_order_cancelled($order_id, $order): void {
         return;
     }
 
-    $step_config = wc_ac_get_email_step_config(1);
-
-    if ($step_config === null) {
-        return;
-    }
-
     as_schedule_single_action(
-        time() + ((int)call_user_func($step_config['delay_minutes']) * MINUTE_IN_SECONDS),
+        time() + (wc_ac_get_recovery_email_delay_minutes() * MINUTE_IN_SECONDS),
         WC_AC_SEND_EMAIL_HOOK,
         ['order_id' => $order->get_id(), 'step' => 1],
         WC_AC_ACTION_GROUP
@@ -170,12 +156,10 @@ function wc_ac_send_recovery_email($order_id, $step = 1): void {
         $token = bin2hex(random_bytes(32));
     }
     catch (Throwable $e) {
-        if (function_exists('wc_get_logger')) {
-            wc_get_logger()->error(
-                sprintf('Could not generate recovery token for order #%d: %s', $order_id, $e->getMessage()),
-                ['source' => 'wc-abandoned-cart']
-            );
-        }
+        wc_get_logger()->error(
+            sprintf('Could not generate recovery token for order #%d: %s', $order_id, $e->getMessage()),
+            ['source' => 'wc-abandoned-cart']
+        );
 
         return;
     }
@@ -197,12 +181,10 @@ function wc_ac_send_recovery_email($order_id, $step = 1): void {
         $sent = false;
         $failure_reason = (string)$e->getMessage();
 
-        if (function_exists('wc_get_logger')) {
-            wc_get_logger()->error(
-                sprintf('Uncaught exception sending recovery email for order #%d: %s', $order_id, $e->getMessage()),
-                ['source' => 'wc-abandoned-cart']
-            );
-        }
+        wc_get_logger()->error(
+            sprintf('Uncaught exception sending recovery email for order #%d: %s', $order_id, $e->getMessage()),
+            ['source' => 'wc-abandoned-cart']
+        );
     }
 
     if (!$sent) {
@@ -232,12 +214,10 @@ function wc_ac_send_recovery_email($order_id, $step = 1): void {
         $order->add_order_note($failure_note);
         $order->save();
 
-        if (function_exists('wc_get_logger')) {
-            wc_get_logger()->error(
-                sprintf('Failed to send abandoned cart recovery email for order #%d (step %d, attempt %d).', $order_id, (int)$step, $attempts),
-                ['source' => 'wc-abandoned-cart']
-            );
-        }
+        wc_get_logger()->error(
+            sprintf('Failed to send abandoned cart recovery email for order #%d (step %d, attempt %d).', $order_id, (int)$step, $attempts),
+            ['source' => 'wc-abandoned-cart']
+        );
 
         $retry_delays_minutes = [5, 15];
         $delay_min = $retry_delays_minutes[$attempts - 1] ?? null;
@@ -295,17 +275,7 @@ function wc_ac_maybe_schedule_next_step(int $order_id, ?int $next_step): void {
 }
 
 function wc_ac_get_email_instance(string $email_id): ?WC_AC_Email_Abandoned_Cart {
-    if (!function_exists('WC')) {
-        return null;
-    }
-
-    $mailer = WC()->mailer();
-
-    if (!$mailer) {
-        return null;
-    }
-
-    $emails = $mailer->get_emails();
+    $emails = WC()->mailer()->get_emails();
     $email = $emails[$email_id] ?? null;
 
     return $email instanceof WC_AC_Email_Abandoned_Cart ? $email : null;

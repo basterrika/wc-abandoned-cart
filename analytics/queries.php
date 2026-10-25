@@ -286,24 +286,6 @@ function wc_ac_get_billing_emails_for_orders(array $order_ids): array {
 }
 
 /**
- * Check whether WooCommerce Analytics order stats are available.
- */
-function wc_ac_has_analytics_order_stats_table(): bool {
-    global $wpdb;
-
-    static $has_table = null;
-
-    if ($has_table !== null) {
-        return $has_table;
-    }
-
-    $table = $wpdb->prefix . 'wc_order_stats';
-    $has_table = $table === $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $table));
-
-    return $has_table;
-}
-
-/**
  * Return the order statuses excluded from WooCommerce analytics, prefixed with 'wc-'.
  *
  * @return array<int, string>
@@ -442,10 +424,6 @@ function wc_ac_get_analytics_abandoned_daily(array $period): array {
 function wc_ac_get_analytics_recovered_daily(array $period): array {
     $empty = ['daily' => [], 'total_count' => 0, 'total_revenue' => 0.0];
 
-    if (!wc_ac_has_analytics_order_stats_table()) {
-        return $empty;
-    }
-
     global $wpdb;
 
     $order_stats_table = $wpdb->prefix . 'wc_order_stats';
@@ -507,10 +485,6 @@ function wc_ac_get_analytics_recovered_daily(array $period): array {
  * @return array<int, array<string, mixed>>
  */
 function wc_ac_get_analytics_recent_recovered(array $period, int $limit = 10): array {
-    if (!wc_ac_has_analytics_order_stats_table()) {
-        return [];
-    }
-
     global $wpdb;
 
     $order_stats_table = $wpdb->prefix . 'wc_order_stats';
@@ -576,26 +550,9 @@ function wc_ac_get_analytics_recent_abandoned(array $period, int $limit = 20, in
 
     $meta_table = wc_ac_orders_meta_table();
     $id_col = wc_ac_orders_meta_id_column();
-    $stats_select = "NULL AS total_sales, '' AS order_status, NULL AS valid_recovered_order_id";
-    $stats_join = '';
-    $recovered_stats_join = '';
-    $extra_params = [];
-
-    if (wc_ac_has_analytics_order_stats_table()) {
-        $order_stats_table = $wpdb->prefix . 'wc_order_stats';
-        $excluded_statuses = wc_ac_get_analytics_excluded_order_statuses();
-        $status_placeholders = implode(', ', array_fill(0, count($excluded_statuses), '%s'));
-
-        $stats_select = 'stats.total_sales, stats.status AS order_status, recovered_stats.order_id AS valid_recovered_order_id';
-        $stats_join = "LEFT JOIN `{$order_stats_table}` stats
-            ON stats.order_id = abandoned.order_id
-            AND stats.parent_id = 0";
-        $recovered_stats_join = "LEFT JOIN `{$order_stats_table}` recovered_stats
-            ON recovered_stats.order_id = CAST(m_recovered.meta_value AS UNSIGNED)
-            AND recovered_stats.parent_id = 0
-            AND recovered_stats.status NOT IN ({$status_placeholders})";
-        $extra_params = $excluded_statuses;
-    }
+    $order_stats_table = $wpdb->prefix . 'wc_order_stats';
+    $excluded_statuses = wc_ac_get_analytics_excluded_order_statuses();
+    $status_placeholders = implode(', ', array_fill(0, count($excluded_statuses), '%s'));
 
     $sql = $wpdb->prepare(
         "SELECT abandoned.order_id AS order_id,
@@ -605,7 +562,9 @@ function wc_ac_get_analytics_recent_abandoned(array $period, int $limit = 20, in
                 m_attempts.meta_value AS send_attempts,
                 m_attempts2.meta_value AS email_2_send_attempts,
                 m_reopened.meta_value AS reopened_at,
-                {$stats_select}
+                stats.total_sales,
+                stats.status AS order_status,
+                recovered_stats.order_id AS valid_recovered_order_id
         FROM (
             SELECT {$id_col} AS order_id, meta_value AS abandoned_at
             FROM `{$meta_table}`
@@ -633,8 +592,13 @@ function wc_ac_get_analytics_recent_abandoned(array $period, int $limit = 20, in
         LEFT JOIN `{$meta_table}` m_recovered
             ON m_recovered.{$id_col} = abandoned.order_id
             AND m_recovered.meta_key = %s
-        {$stats_join}
-        {$recovered_stats_join}
+        LEFT JOIN `{$order_stats_table}` stats
+            ON stats.order_id = abandoned.order_id
+            AND stats.parent_id = 0
+        LEFT JOIN `{$order_stats_table}` recovered_stats
+            ON recovered_stats.order_id = CAST(m_recovered.meta_value AS UNSIGNED)
+            AND recovered_stats.parent_id = 0
+            AND recovered_stats.status NOT IN ({$status_placeholders})
         ORDER BY abandoned.abandoned_at DESC, abandoned.order_id DESC",
         ...array_merge(
             [
@@ -650,7 +614,7 @@ function wc_ac_get_analytics_recent_abandoned(array $period, int $limit = 20, in
                 WC_AC_META_REOPENED_AT,
                 WC_AC_META_RECOVERED_ORDER,
             ],
-            $extra_params
+            $excluded_statuses
         )
     );
 
@@ -703,10 +667,6 @@ function wc_ac_get_analytics_reopened_count_for_abandoned_period(array $period):
  * @param array<string, mixed> $period Analytics period.
  */
 function wc_ac_get_analytics_recovered_count_for_abandoned_period(array $period): int {
-    if (!wc_ac_has_analytics_order_stats_table()) {
-        return 0;
-    }
-
     global $wpdb;
 
     $order_stats_table = $wpdb->prefix . 'wc_order_stats';
@@ -763,12 +723,6 @@ function wc_ac_get_current_abandoned_summary(): array {
     static $summary = null;
 
     if ($summary !== null) {
-        return $summary;
-    }
-
-    if (!wc_ac_has_analytics_order_stats_table()) {
-        $summary = ['count' => 0, 'revenue' => 0.0];
-
         return $summary;
     }
 
