@@ -99,5 +99,6 @@ recovery link (which supersedes the first email's link).
 - The plugin does not email customers before WooCommerce cancels the unpaid order.
 - The abandoned cart email requires a valid billing email and a captured cart snapshot.
 - Recovery links are one-time use and expire 7 days after the most recent reminder is sent.
+- Cart snapshots are only saved for pending orders. They are deleted when the order is paid or otherwise moves on, when its cart is recovered, or, for unrecovered cancelled and failed orders, once no reminder is pending and the latest recovery link has expired.
 - A second reminder is available but disabled by default; enable it per the Settings section above.
 - Configure the email content in `WooCommerce > Settings > Emails > Abandoned cart reminder`.

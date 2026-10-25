@@ -884,7 +884,7 @@ function wc_ac_get_recent_recovered_orders(array $recovered_orders): array {
 
     $order_objects = [];
 
-    foreach (wc_get_orders(['include' => $order_ids, 'limit' => count($order_ids)]) as $obj) {
+    foreach (wc_get_orders(['post__in' => $order_ids, 'limit' => count($order_ids)]) as $obj) {
         $order_objects[$obj->get_id()] = $obj;
     }
 
@@ -942,7 +942,7 @@ function wc_ac_get_recent_abandoned_orders(array $rows): array {
     $all_ids = array_values(array_unique(array_merge($abandoned_ids, $recovered_ids)));
     $order_objects = [];
 
-    foreach (wc_get_orders(['include' => $all_ids, 'limit' => count($all_ids), 'status' => 'any']) as $obj) {
+    foreach (wc_get_orders(['post__in' => $all_ids, 'limit' => count($all_ids), 'status' => 'any']) as $obj) {
         $order_objects[$obj->get_id()] = $obj;
     }
 

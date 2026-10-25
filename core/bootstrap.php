@@ -8,6 +8,7 @@ const WC_AC_SEND_EMAIL_HOOK = 'wc_abandoned_cart_send_recovery_email';
 const WC_AC_OPTION_ENABLED = 'wc_ac_enabled';
 const WC_AC_OPTION_EMAIL_DELAY = 'wc_ac_recovery_email_delay_minutes';
 const WC_AC_OPTION_EMAIL_2_DELAY = 'wc_ac_recovery_email_2_delay_minutes';
+const WC_AC_OPTION_SNAPSHOT_CLEANUP_PAGE = 'wc_ac_snapshot_cleanup_page';
 const WC_AC_META_ABANDONED_AT = '_wc_ac_abandoned_at';
 const WC_AC_META_EMAIL_SENT_AT = '_wc_ac_email_sent_at';
 const WC_AC_META_SEND_ATTEMPTS = '_wc_ac_send_attempts';

@@ -150,7 +150,7 @@ function wc_ac_send_recovery_email($order_id, $step = 1): void {
         return;
     }
 
-    if ($order->get_meta(WC_AC_META_ABANDONED_AT) === '') {
+    if ($order->get_meta(WC_AC_META_ABANDONED_AT) === '' || !is_array($order->get_meta(WC_AC_META_CART_SNAPSHOT))) {
         return;
     }
 

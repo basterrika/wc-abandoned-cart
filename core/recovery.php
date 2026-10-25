@@ -27,7 +27,7 @@ function wc_ac_capture_cart_snapshot($arg): void {
 
     $order = $arg instanceof WC_Order ? $arg : wc_get_order((int)$arg);
 
-    if (!$order instanceof WC_Order || !is_email((string)$order->get_billing_email())) {
+    if (!$order instanceof WC_Order || !$order->has_status('pending') || !is_email((string)$order->get_billing_email())) {
         return;
     }
 
@@ -47,6 +47,67 @@ function wc_ac_capture_cart_snapshot($arg): void {
 
     $order->update_meta_data(WC_AC_META_CART_SNAPSHOT, $snapshot);
     $order->save();
+}
+
+/**
+ * Drop the snapshot as soon as the order leaves the statuses recovery can use.
+ *
+ * Pending may still be auto-cancelled, failed may be retried back to pending,
+ * and cancelled is the recovery flow itself (cleaned by the expiry sweep below).
+ */
+add_action('woocommerce_order_status_changed', 'wc_ac_maybe_drop_cart_snapshot', 10, 4);
+function wc_ac_maybe_drop_cart_snapshot($order_id, $from, $to, WC_Order $order): void {
+    if (in_array($to, ['pending', 'failed', 'cancelled'], true) || $order->get_meta(WC_AC_META_CART_SNAPSHOT) === '') {
+        return;
+    }
+
+    $order->delete_meta_data(WC_AC_META_CART_SNAPSHOT);
+    $order->save_meta_data();
+}
+
+/**
+ * Expiry sweep for snapshots left on cancelled and failed orders.
+ *
+ * A snapshot goes once no reminder is queued or running and the latest link has
+ * expired. The modified-date filter only narrows the query: the legacy order
+ * store doesn't bump it on meta-only saves such as a reminder send. Rides on
+ * WooCommerce's twice-daily session cleanup instead of a schedule of its own.
+ */
+add_action('woocommerce_cleanup_sessions', 'wc_ac_cleanup_cart_snapshots');
+function wc_ac_cleanup_cart_snapshots(): void {
+    $page = max(1, (int)get_option(WC_AC_OPTION_SNAPSHOT_CLEANUP_PAGE, 1));
+    $args = [
+        'limit' => 200,
+        'page' => $page,
+        'orderby' => 'ID',
+        'order' => 'ASC',
+        'status' => ['cancelled', 'failed'],
+        'date_modified' => '<' . (time() - (WC_AC_RECOVERY_TOKEN_TTL_DAYS + 1) * DAY_IN_SECONDS),
+        'return' => 'ids',
+        'meta_key' => WC_AC_META_CART_SNAPSHOT,
+        'meta_compare' => 'EXISTS',
+    ];
+
+    $found = wc_get_orders($args);
+
+    update_option(WC_AC_OPTION_SNAPSHOT_CLEANUP_PAGE, count($found) < $args['limit'] ? 1 : $page + 1, false);
+
+    foreach ($found as $order_id) {
+        $order_id = absint($order_id);
+
+        foreach ([1, 2] as $step) {
+            if (function_exists('as_has_scheduled_action') && as_has_scheduled_action(WC_AC_SEND_EMAIL_HOOK, ['order_id' => $order_id, 'step' => $step], WC_AC_ACTION_GROUP)) {
+                continue 2;
+            }
+        }
+
+        $order = wc_get_order($order_id);
+
+        if ($order instanceof WC_Order && $order->has_status(['cancelled', 'failed']) && wc_ac_recovery_token_is_expired($order)) {
+            $order->delete_meta_data(WC_AC_META_CART_SNAPSHOT);
+            $order->save_meta_data();
+        }
+    }
 }
 
 add_action('template_redirect', 'wc_ac_maybe_handle_recovery', 1);
@@ -253,6 +314,7 @@ function wc_ac_complete_recovery(int $new_order_id, int $original_order_id): voi
     if ($original instanceof WC_Order && (int)$original->get_meta(WC_AC_META_RECOVERED_ORDER) === 0) {
         $original->update_meta_data(WC_AC_META_RECOVERED_ORDER, (string)$new_order_id);
         $original->update_meta_data(WC_AC_META_RECOVERED_AT, wc_ac_now());
+        $original->delete_meta_data(WC_AC_META_CART_SNAPSHOT);
         $original->save();
     }
 
@@ -284,12 +346,8 @@ function wc_ac_find_order_by_recovery_token(string $token): ?WC_Order {
         'limit' => 1,
         'status' => ['cancelled'],
         'return' => 'ids',
-        'meta_query' => [
-            [
-                'key' => WC_AC_META_TOKEN_HASH,
-                'value' => hash('sha256', $token),
-            ],
-        ],
+        'meta_key' => WC_AC_META_TOKEN_HASH,
+        'meta_value' => hash('sha256', $token),
     ]);
 
     if (empty($orders)) {
